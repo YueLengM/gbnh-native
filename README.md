@@ -1,8 +1,9 @@
 # gbnh-native
 
-Native build for GregBoyNH. This repository builds the Windows x86_64 C API
-library that will be used by the Minecraft mod. JNI bindings and the emulator
-session API are not implemented yet.
+Native build for GregBoyNH. This repository builds the Windows x86_64 JNI runtime
+used by the Minecraft mod. JNI ABI 1 provides independent GBA sessions, per-frame
+ARGB video and interleaved PCM16 stereo audio, key input, reset, battery saves,
+and mGBA snapshots including battery data and RTC.
 
 The mGBA revision is pinned to 0.10.5 in `cmake/mgba.cmake`. CI uses the tools
 inside the pinned official Docker image. `mise.toml` is only for optional local
@@ -30,8 +31,11 @@ Before publication, CI verifies the PE architecture and rejects imports of
 non-system DLLs, including dynamically linked MinGW runtimes. A separate Windows
 job loads the packaged DLL with its search path restricted to the bundle and
 Windows System32, then calls the version function and initializes/destroys the
-GBA core three times. This check does not load a ROM or verify gameplay, JNI,
-audio, rendering, or link emulation.
+GBA core three times. A Java 8 JVM then runs the JNI smoke test with `-Xcheck:jni`,
+using a generated original homebrew ROM. It verifies a red framebuffer, a PSG
+tone, key input, battery-save round trips, snapshots, independent simultaneous
+cores and invalid handles. Minecraft presentation and link emulation are not
+covered by these tests.
 
 The artifact names no longer contain `ucrt`: the official Docker toolchain is
 different from the previous MSYS2 UCRT64 build.
@@ -39,20 +43,18 @@ different from the previous MSYS2 UCRT64 build.
 ## Local development on Windows
 
 MSYS2 UCRT64 remains an option for local development; it is not the CI release
-toolchain. Run `mise trust` and `mise install` in this directory. Install the
+toolchain. CMake can be installed globally; mise is optional. Install the
 compiler and Ninja from the MSYS2 UCRT64 terminal:
 
 ```bash
 pacman -S --needed mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-ninja
 ```
 
-Build from that terminal in the repository directory, with mise on PATH:
+With CMake and `C:/msys64/ucrt64/bin` on PATH, build from PowerShell in this repository:
 
-```bash
-CMAKE_EXE="$(cygpath -u "$(mise where cmake)")/bin/cmake.exe"
-"$CMAKE_EXE" --version
-"$CMAKE_EXE" -G Ninja -S . -B build/local -DCMAKE_BUILD_TYPE=Release
-"$CMAKE_EXE" --build build/local --target gbnh_native
+```powershell
+cmake -G Ninja -S . -B build/local -DCMAKE_BUILD_TYPE=Release
+cmake --build build/local --target gbnh_native
 ```
 
 Local MSYS2 builds can have different runtime dependencies. Use the verified

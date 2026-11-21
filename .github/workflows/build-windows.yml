@@ -92,6 +92,23 @@ jobs:
         shell: pwsh
         run: python .github/scripts/verify-windows.py dist/native/gbnh_mgba.dll
 
+      - name: Set up Java 8 for JNI verification
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          architecture: x64
+
+      - name: Verify JNI frames, audio, saves and session isolation
+        shell: pwsh
+        run: |
+          $sources = @(Get-ChildItem tests/java -Recurse -Filter *.java | ForEach-Object FullName)
+          New-Item -ItemType Directory -Force build/jni-test | Out-Null
+          javac -source 8 -target 8 -d build/jni-test $sources
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java -Xcheck:jni -cp build/jni-test com.yuelengm.gbnh.emulation.NativeSmokeTest "$((Resolve-Path dist/native/gbnh_mgba.dll).Path)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
   publish-dev:
     if: github.ref_type == 'branch'
     needs: [build, verify-windows]

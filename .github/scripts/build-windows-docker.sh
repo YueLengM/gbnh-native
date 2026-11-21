@@ -43,6 +43,7 @@ printf '%s\n' "${dependencies[@]}" | sort -u | tee "$bundle_dir/dependencies.txt
 {
   echo 'gbnh-native Windows x86_64 MinGW bundle'
   echo 'mGBA: 0.10.5'
+  echo 'JNI ABI: 1'
   echo 'mGBA source: https://github.com/mgba-emu/mgba/tree/0.10.5'
   printf 'Channel: %s\n' "${GBNH_BUILD_CHANNEL:?}"
   printf 'Version: %s\n' "${GBNH_BUILD_VERSION:?}"
