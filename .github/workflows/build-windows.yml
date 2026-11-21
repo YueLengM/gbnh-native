@@ -2,6 +2,8 @@ name: Build Windows native
 
 on:
   push:
+    branches:
+      - '**'
     tags:
       - '*'
   workflow_dispatch:
@@ -9,12 +11,18 @@ on:
 permissions:
   contents: read
 
+env:
+  GBNH_DOCKER_IMAGE: mgba/windows:w64-20261111@sha256:0aa031337f36526aa1791ed618509649ce6bea2d9ed60140739ae5968f894e61
+
 jobs:
   build:
-    runs-on: windows-latest
+    outputs:
+      artifact-name: ${{ steps.metadata.outputs.artifact }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
-        shell: msys2 {0}
+        shell: bash
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -22,57 +30,101 @@ jobs:
       - name: Set up pinned CMake with mise
         uses: jdx/mise-action@v3
 
-      - name: Locate pinned CMake
-        shell: pwsh
+      - name: Set build metadata
+        id: metadata
         run: |
-          $cmakeRoot = (mise where cmake).Trim()
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to locate CMake installed by mise' }
-          $cmake = Join-Path $cmakeRoot 'bin/cmake.exe'
-          if (-not (Test-Path -LiteralPath $cmake)) { throw "CMake executable not found: $cmake" }
-          $version = & $cmake --version
-          if ($LASTEXITCODE -ne 0 -or $version[0] -ne 'cmake version 3.31.12') {
-            throw "Expected CMake 3.31.12, got: $version"
-          }
-          $version
-          "GBNH_CMAKE=$cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            channel=release
+            version="$GITHUB_REF_NAME"
+            artifact=gbnh-native-windows-x86_64
+          else
+            channel=dev
+            version="dev-${GITHUB_SHA:0:8}"
+            artifact="gbnh-native-windows-x86_64-$version"
+          fi
+          {
+            printf 'channel=%s\n' "$channel"
+            printf 'version=%s\n' "$version"
+            printf 'artifact=%s\n' "$artifact"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Set up MSYS2 UCRT64
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-ninja
-            git
-
-      - name: Configure
+      - name: Build with the official mGBA Windows toolchain
+        env:
+          GBNH_BUILD_CHANNEL: ${{ steps.metadata.outputs.channel }}
+          GBNH_BUILD_VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          cmake="$(cygpath -u "$GBNH_CMAKE")"
-          "$cmake" --version
-          "$cmake" -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: |
-          "$(cygpath -u "$GBNH_CMAKE")" --build build
-
-      - name: Install bundle
-        run: |
-          "$(cygpath -u "$GBNH_CMAKE")" --install build --prefix dist
-
-      - name: Bundle MinGW runtime files
-        run: |
-          mkdir -p dist/native
-          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-            if [ -f "/ucrt64/bin/$dll" ]; then
-              cp "/ucrt64/bin/$dll" dist/native/
-            fi
-          done
-          echo "gbnh-native Windows x86_64 UCRT bundle" > dist/native/manifest.txt
-          echo "mGBA: 0.10.5" >> dist/native/manifest.txt
+          cmake_root="$(mise where cmake)"
+          test -x "$cmake_root/bin/cmake"
+          docker pull --platform linux/amd64 "$GBNH_DOCKER_IMAGE"
+          docker run --rm --platform linux/amd64 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --env CCACHE_DISABLE=1 \
+            --env GBNH_BUILD_CHANNEL --env GBNH_BUILD_VERSION \
+            --env GITHUB_SHA --env GITHUB_REF --env GBNH_DOCKER_IMAGE \
+            --volume "$GITHUB_WORKSPACE:/home/mgba/src" \
+            --volume "$cmake_root:/opt/gbnh-cmake:ro" \
+            --workdir /home/mgba/src \
+            --entrypoint /bin/bash \
+            "$GBNH_DOCKER_IMAGE" .github/scripts/build-windows-docker.sh
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gbnh-native-windows-x86_64-ucrt
+          name: ${{ steps.metadata.outputs.artifact }}
           path: dist/native
+          if-no-files-found: error
+
+  verify-windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out verification script
+        uses: actions/checkout@v4
+
+      - name: Download native bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist/native
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Load DLL and initialize the GBA core
+        shell: pwsh
+        run: python .github/scripts/verify-windows.py dist/native/gbnh_mgba.dll
+
+  publish-dev:
+    if: github.ref_type == 'branch'
+    needs: [build, verify-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: gbnh-native-dev-release
+      cancel-in-progress: false
+    steps:
+      - name: Check out publishing script
+        uses: actions/checkout@v4
+
+      - name: Download native bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist/native
+
+      - name: Package stable dev download
+        working-directory: dist/native
+        run: zip -r "$GITHUB_WORKSPACE/gbnh-native-windows-x86_64.zip" .
+
+      - name: Update rolling dev prerelease
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const publishDev = require('./.github/scripts/publish-dev.cjs');
+            await publishDev({ github, context, core });

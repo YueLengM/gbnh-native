@@ -1,6 +1,7 @@
 #include "gbnh_native.h"
 
 #ifdef GBNH_HAS_MGBA
+#include <mgba/flags.h>
 #include <mgba/core/core.h>
 #endif
 
@@ -12,6 +13,10 @@ int gbnh_native_mgba_available(void) {
 #ifdef GBNH_HAS_MGBA
     struct mCore* core = mCoreCreate(mPLATFORM_GBA);
     if (!core) {
+        return 0;
+    }
+    if (!core->init(core)) {
+        free(core);
         return 0;
     }
     core->deinit(core);

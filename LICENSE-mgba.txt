@@ -1,4 +1,8 @@
-mGBA is distributed under the Mozilla Public License 2.0.
+mGBA 0.10.5 source and license notice
 
-The complete license text and the corresponding mGBA source must be included
-with release bundles before distributing this native library.
+The mGBA core is statically linked into gbnh_mgba.dll without source changes.
+Upstream source: https://github.com/mgba-emu/mgba/tree/0.10.5
+Source archive: https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz
+
+The bundle's LICENSE-mgba.txt is copied from that upstream revision's LICENSE.
+Additional upstream third-party license notices are included in licenses/.
