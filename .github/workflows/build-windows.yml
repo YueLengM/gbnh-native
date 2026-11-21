@@ -19,6 +19,23 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Set up pinned CMake with mise
+        uses: jdx/mise-action@v3
+
+      - name: Locate pinned CMake
+        shell: pwsh
+        run: |
+          $cmakeRoot = (mise where cmake).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to locate CMake installed by mise' }
+          $cmake = Join-Path $cmakeRoot 'bin/cmake.exe'
+          if (-not (Test-Path -LiteralPath $cmake)) { throw "CMake executable not found: $cmake" }
+          $version = & $cmake --version
+          if ($LASTEXITCODE -ne 0 -or $version[0] -ne 'cmake version 3.31.12') {
+            throw "Expected CMake 3.31.12, got: $version"
+          }
+          $version
+          "GBNH_CMAKE=$cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up MSYS2 UCRT64
         uses: msys2/setup-msys2@v2
         with:
@@ -26,18 +43,22 @@ jobs:
           update: true
           install: >-
             mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             git
 
       - name: Configure
-        run: cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake="$(cygpath -u "$GBNH_CMAKE")"
+          "$cmake" --version
+          "$cmake" -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build
+        run: |
+          "$(cygpath -u "$GBNH_CMAKE")" --build build
 
       - name: Install bundle
-        run: cmake --install build --prefix dist
+        run: |
+          "$(cygpath -u "$GBNH_CMAKE")" --install build --prefix dist
 
       - name: Bundle MinGW runtime files
         run: |
