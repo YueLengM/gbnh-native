@@ -1,0 +1,8 @@
+/build/
+/.vs/
+/.idea/
+*.dll
+*.lib
+*.a
+*.so
+*.dylib

@@ -1,0 +1,4 @@
+mGBA is distributed under the Mozilla Public License 2.0.
+
+The complete license text and the corresponding mGBA source must be included
+with release bundles before distributing this native library.
