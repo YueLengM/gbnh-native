@@ -27,9 +27,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up pinned CMake with mise
-        uses: jdx/mise-action@v3
-
       - name: Set build metadata
         id: metadata
         run: |
@@ -53,8 +50,6 @@ jobs:
           GBNH_BUILD_CHANNEL: ${{ steps.metadata.outputs.channel }}
           GBNH_BUILD_VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          cmake_root="$(mise where cmake)"
-          test -x "$cmake_root/bin/cmake"
           docker pull --platform linux/amd64 "$GBNH_DOCKER_IMAGE"
           docker run --rm --platform linux/amd64 \
             --user "$(id -u):$(id -g)" \
@@ -63,7 +58,6 @@ jobs:
             --env GBNH_BUILD_CHANNEL --env GBNH_BUILD_VERSION \
             --env GITHUB_SHA --env GITHUB_REF --env GBNH_DOCKER_IMAGE \
             --volume "$GITHUB_WORKSPACE:/home/mgba/src" \
-            --volume "$cmake_root:/opt/gbnh-cmake:ro" \
             --workdir /home/mgba/src \
             --entrypoint /bin/bash \
             "$GBNH_DOCKER_IMAGE" .github/scripts/build-windows-docker.sh

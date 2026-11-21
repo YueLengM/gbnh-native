@@ -4,17 +4,22 @@ Native build for GregBoyNH. This repository builds the Windows x86_64 C API
 library that will be used by the Minecraft mod. JNI bindings and the emulator
 session API are not implemented yet.
 
-The mGBA revision is pinned to 0.10.5 in `cmake/mgba.cmake`. CMake is pinned
-to 3.31.12 in `mise.toml`; CI does not use the CMake version from the Docker
-image.
+The mGBA revision is pinned to 0.10.5 in `cmake/mgba.cmake`. CI uses the tools
+inside the pinned official Docker image. `mise.toml` is only for optional local
+Windows development.
 
 ## GitHub Actions build
 
 The build runs on Ubuntu using the official `mgba/windows:w64-20261111` Docker
 image, pinned by its SHA-256 manifest digest in the workflow. The official
 `/opt/win64/CMakeToolchain.txt` supplies the MinGW-w64 cross compiler and static
-runtime link flags. The Linux CMake installed by mise is mounted read-only into
-the container. No Docker installation is needed on a player's computer.
+runtime link flags. CMake comes directly from the image; CI does not install
+mise or mount a host CMake into the container. No Docker installation is needed
+on a player's computer.
+
+Configuration passes `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` so that CMake 4 can
+configure mGBA 0.10.5, whose declared policy minimum predates CMake 3.5. This is
+a project configuration option; the container's tools are not replaced.
 
 The build enables `LIBMGBA_ONLY` and the GBA core, statically linking mGBA into
 `gbnh_mgba.dll`. The bundle includes the mGBA license, upstream third-party

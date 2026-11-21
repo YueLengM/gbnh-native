@@ -2,24 +2,19 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
-cmake=/opt/gbnh-cmake/bin/cmake
 build_dir=build/docker-windows-x86_64
 bundle_dir="$PWD/dist/native"
 
-# Use the mise-pinned CMake, not the version installed in the Docker image.
-version="$("$cmake" --version)"
-if [[ "${version%%$'\n'*}" != 'cmake version 3.31.12' ]]; then
-  printf 'Expected CMake 3.31.12, got: %s\n' "$version" >&2
-  exit 1
-fi
-printf '%s\n' "$version"
+# Use the CMake and compiler shipped in the pinned official image.
+cmake --version
 x86_64-w64-mingw32-gcc --version
 
-"$cmake" -S . -B "$build_dir" -G 'Unix Makefiles' \
+cmake -S . -B "$build_dir" -G 'Unix Makefiles' \
   -DCMAKE_TOOLCHAIN_FILE=/opt/win64/CMakeToolchain.txt \
-  -DCMAKE_BUILD_TYPE=Release
-"$cmake" --build "$build_dir" --target gbnh_native --parallel "$(nproc)"
-"$cmake" --install "$build_dir" --prefix "$PWD/dist" --component gbnh-native
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build "$build_dir" --target gbnh_native --parallel "$(nproc)"
+cmake --install "$build_dir" --prefix "$PWD/dist" --component gbnh-native
 
 dll="$bundle_dir/gbnh_mgba.dll"
 test -f "$dll"
@@ -55,5 +50,5 @@ printf '%s\n' "${dependencies[@]}" | sort -u | tee "$bundle_dir/dependencies.txt
   printf 'Ref: %s\n' "${GITHUB_REF:?}"
   printf 'Build image: %s\n' "${GBNH_DOCKER_IMAGE:?}"
   printf 'Compiler: %s %s\n' "$(x86_64-w64-mingw32-gcc -dumpmachine)" "$(x86_64-w64-mingw32-gcc -dumpfullversion)"
-  echo 'CMake: 3.31.12'
+  printf 'CMake: %s\n' "$(cmake --version | awk 'NR == 1 {print $3}')"
 } > "$bundle_dir/manifest.txt"
